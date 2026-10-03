@@ -1,4 +1,4 @@
-CREATE table contact
+CREATE TABLE contact
 (
     id      SERIAL PRIMARY KEY,
     surname VARCHAR(100) NOT NULL,
