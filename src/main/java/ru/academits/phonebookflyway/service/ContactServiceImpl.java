@@ -2,10 +2,12 @@ package ru.academits.phonebookflyway.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import ru.academits.phonebookflyway.dao.ContactRepository;
+import ru.academits.phonebookflyway.dto.BaseResponse;
 import ru.academits.phonebookflyway.entity.Contact;
-import ru.academits.phonebookflyway.exception.ContactException;
 
 import java.util.List;
 
@@ -14,56 +16,68 @@ import java.util.List;
 @Slf4j
 public class ContactServiceImpl implements ContactService {
     private final ContactRepository contactRepository;
+    private final MessageSource messageSource;
 
     @Override
     public List<Contact> get(String term) {
+        List<Contact> contacts;
+
         if (term == null || term.isBlank()) {
-            List<Contact> contacts = contactRepository.findAll();
-            log.debug("Loaded {} contact(s)", contacts.size());
-            return contacts;
+            contacts = contactRepository.findAllByOrderByIdAsc();
+        } else {
+            contacts = contactRepository.findByTerm(term.trim());
         }
 
-        List<Contact> contacts = contactRepository.findByTerm(term.trim());
-        log.debug("Found {} contact(s)", contacts.size());
+        log.debug("Loaded {} contact(s)", contacts.size());
         return contacts;
     }
 
     @Override
-    public void create(Contact contact) {
+    public BaseResponse create(Contact contact) {
         if (contactRepository.existsByPhoneIgnoreCase(contact.getPhone())) {
-            throw new ContactException("contact.phone.already-exists");
+            return BaseResponse.error(getMessage("contact.phone.already-exists"));
         }
 
         contactRepository.save(contact);
         log.info("Contact created, id={}", contact.getId());
+        return BaseResponse.ok();
     }
 
     @Override
-    public void update(int contactId, Contact contact) {
+    public BaseResponse update(Contact contact, int contactId) {
         Contact existingContact = contactRepository.findById(contactId)
-                .orElseThrow(() -> new ContactException("contact.not-found"));
+                .orElse(null);
 
-        if (contactRepository.existsByPhoneIgnoreCaseAndIdNot(contact.getPhone(), contactId)) {
-            throw new ContactException("contact.phone.already-exists");
+        if (existingContact == null) {
+            return BaseResponse.error(getMessage("contact.not-found"));
         }
 
-        existingContact.setSurname(contact.getSurname());
-        existingContact.setName(contact.getName());
-        existingContact.setPhone(contact.getPhone());
+        if (contactRepository.existsByPhoneIgnoreCaseAndIdNot(contact.getPhone(), contactId)) {
+            return BaseResponse.error(getMessage("contact.phone.already-exists"));
+        }
+
+        existingContact.updateFrom(contact);
 
         contactRepository.save(existingContact);
         log.info("Contact updated, id={}", contactId);
+        return BaseResponse.ok();
     }
 
     @Override
-    public void delete(int contactId) {
+    public BaseResponse delete(int contactId) {
         contactRepository.deleteById(contactId);
         log.info("Contact deleted, id={}", contactId);
+        return BaseResponse.ok();
     }
 
     @Override
-    public void delete(List<Integer> contactIds) {
+    public BaseResponse delete(List<Integer> contactIds) {
         contactRepository.deleteAllById(contactIds);
         log.info("Contacts deleted, ids={}", contactIds);
+        return BaseResponse.ok();
+    }
+
+    private String getMessage(String key) {
+        return messageSource.getMessage(key, null, LocaleContextHolder.getLocale());
     }
 }
